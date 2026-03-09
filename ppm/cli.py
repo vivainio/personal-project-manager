@@ -315,11 +315,15 @@ def _zaira_summary(ticket_id: str) -> str | None:
     return summary
 
 
-@app.command()
-def tickets(
+tickets_app = typer.Typer(help="Manage tickets", no_args_is_help=True)
+app.add_typer(tickets_app, name="tickets")
+
+
+@tickets_app.command("list")
+def tickets_list(
     filter: str = typer.Argument(None, help="Project name or repo pattern to scope search"),
 ) -> None:
-    """Show tickets (branch names with ticket IDs) checked out across local repos."""
+    """Show tickets checked out across local repos."""
     cfg = config_module.load()
     repo_list = repos_module.get_repos()
 
@@ -331,7 +335,6 @@ def tickets(
             pat = filter if "*" in filter or "?" in filter else f"*{filter}*"
             repo_list = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat.lower())]
 
-    # ticket_id → [(repo_name, branch)]
     by_ticket: dict[str, list[tuple[str, str]]] = defaultdict(list)
 
     for repo in repo_list:
@@ -358,3 +361,27 @@ def tickets(
         console.print(header)
         for repo_name, branch in entries:
             console.print(f"  [bold]{repo_name}[/bold]  [dim]{branch}[/dim]")
+
+
+@tickets_app.command("search")
+def tickets_search(
+    query: str = typer.Argument(..., help="String to search in cached ticket summaries"),
+) -> None:
+    """Search cached ticket summaries."""
+    cached: dict[str, str] = cache_module.get("tickets", ttl=10**9) or {}
+    if not cached:
+        console.print("[dim]No tickets in cache yet.[/dim]")
+        return
+
+    query_lower = query.lower()
+    matches = {
+        tid: summary for tid, summary in cached.items()
+        if query_lower in tid.lower() or query_lower in summary.lower()
+    }
+
+    if not matches:
+        console.print(f"[dim]No cached tickets matching '{query}'.[/dim]")
+        return
+
+    for tid, summary in sorted(matches.items()):
+        console.print(f"[bold cyan]{tid}[/bold cyan]  {summary}")
