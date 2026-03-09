@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ppm import config as config_module
+from ppm import gh_auth as gh_auth_module
 from ppm import locations as locations_module
 from ppm import repos as repos_module
 
@@ -188,6 +189,16 @@ def clone(
 
     if not yes:
         typer.confirm("Clone?", abort=True)
+
+    repo_owner = found["nameWithOwner"].split("/")[0]
+    accounts = gh_auth_module.get_accounts()
+    active = gh_auth_module.active_account(accounts)
+    if not gh_auth_module.ensure_org_account(cfg.orgs, repo_owner):
+        console.print("[red]No gh account with underscore found for org repos.[/red]")
+        raise typer.Exit(1)
+    new_active = gh_auth_module.active_account(gh_auth_module.get_accounts())
+    if new_active and active and new_active.username != active.username:
+        console.print(f"[dim]switched gh account → {new_active.username}[/dim]")
 
     target.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["gh", "repo", "clone", found["nameWithOwner"], str(target)], check=True)
