@@ -14,17 +14,17 @@ DEFAULT_CONFIG = """\
 repos_root: ~/r
 
 # GitHub orgs to include when listing repos (in addition to your own account)
-orgs:
-  - basware
+# orgs:
+#   - myorg
 
 # Associate repos to named projects by repo name prefixes
 # projects:
-#   dh:
+#   foo:
 #     prefixes:
-#       - dh-
-#   som:
+#       - foo-
+#   bar:
 #     prefixes:
-#       - som-
+#       - bar-
 """
 
 _yaml = YAML()

@@ -51,20 +51,20 @@ repos_root: ~/r          # Root dir for clones
 zaira: true              # Fetch ticket summaries via zaira CLI
 
 orgs:
-  - basware              # GitHub orgs to include in repo listing
+  - myorg                # GitHub orgs to include in repo listing
 
 projects:
-  dh:
+  foo:
     prefixes:
-      - dh-
-  som:
+      - foo-
+  bar:
     prefixes:
-      - som-
+      - bar-
 ```
 
 ## Key Conventions
 
-- **Expected clone path**: `repos_root / project / repo-name` (e.g. `~/r/dh/dh-core`)
+- **Expected clone path**: `repos_root / project / repo-name` (e.g. `~/r/foo/foo-core`)
 - **Non-standard paths** recorded in `~/.cache/ppm/locations.json` via `ppm here`
 - **Path colors**: green = at expected location, yellow = override path recorded
 - **Branch column** only shown when a filter is active (too slow for all repos)
