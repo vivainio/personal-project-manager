@@ -1,6 +1,5 @@
 """Cache of non-standard local clone paths for repos."""
 
-import json
 import re
 import subprocess
 from pathlib import Path

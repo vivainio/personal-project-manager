@@ -1,15 +1,14 @@
 """ppm CLI entry point."""
 
 import fnmatch
+import importlib.metadata
 import json
 import re
 import subprocess
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
-import importlib.metadata
 
 import typer
 from rich.console import Console
@@ -35,9 +34,12 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
-    version: bool = typer.Option(None, "--version", "-V", callback=_version_callback, is_eager=True, help="Show version and exit"),
+    version: bool = typer.Option(
+        None, "--version", "-V", callback=_version_callback, is_eager=True, help="Show version and exit"
+    ),
 ) -> None:
     pass
+
 
 console = Console()
 
@@ -151,7 +153,7 @@ def here(
 
 def _pr_age(created_at: str) -> str:
     created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-    days = (datetime.now(timezone.utc) - created).days
+    days = (datetime.now(UTC) - created).days
     if days == 0:
         return "today"
     if days == 1:
@@ -163,6 +165,7 @@ def _pr_age(created_at: str) -> str:
 
 
 # --- ppm pr ---
+
 
 @app.command()
 def pr(
@@ -185,9 +188,17 @@ def pr(
 
     def fetch(repo: dict) -> tuple[str, dict[str, list[dict]]]:
         result = subprocess.run(
-            ["gh", "pr", "list", "--repo", repo["nameWithOwner"],
-             "--json", "number,title,author,headRefName,createdAt"],
-            capture_output=True, text=True,
+            [
+                "gh",
+                "pr",
+                "list",
+                "--repo",
+                repo["nameWithOwner"],
+                "--json",
+                "number,title,author,headRefName,createdAt",
+            ],
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0 or not result.stdout.strip():
             return repo["name"], {}
@@ -217,6 +228,7 @@ def pr(
 
 
 # --- ppm projects ---
+
 
 @projects_app.command("list")
 def projects_list() -> None:
@@ -259,10 +271,7 @@ def clone(
     name_lower = repo.lower()
 
     # Try exact match first, then fall back to substring
-    matches = [
-        r for r in repo_list
-        if r["name"].lower() == name_lower or r["nameWithOwner"].lower() == name_lower
-    ]
+    matches = [r for r in repo_list if r["name"].lower() == name_lower or r["nameWithOwner"].lower() == name_lower]
     if not matches:
         pat = name_lower if "*" in name_lower or "?" in name_lower else f"*{name_lower}*"
         matches = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat)]
@@ -316,14 +325,15 @@ def _zaira_summary(ticket_id: str) -> str | None:
         return cached[ticket_id]
     result = subprocess.run(
         ["zaira", "get", ticket_id, "--min"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         return None
     summary = None
     for line in result.stdout.splitlines():
         if line.startswith("summary:"):
-            summary = line[len("summary:"):].strip()
+            summary = line[len("summary:") :].strip()
             break
     if summary:
         cached[ticket_id] = summary
@@ -391,8 +401,7 @@ def tickets_search(
 
     query_lower = query.lower()
     matches = {
-        tid: summary for tid, summary in cached.items()
-        if query_lower in tid.lower() or query_lower in summary.lower()
+        tid: summary for tid, summary in cached.items() if query_lower in tid.lower() or query_lower in summary.lower()
     }
 
     if not matches:

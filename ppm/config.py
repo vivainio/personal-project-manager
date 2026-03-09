@@ -77,8 +77,7 @@ def add_project(name: str, prefix: str) -> None:
 def load() -> Config:
     data = _read()
     projects = [
-        Project(name=name, prefixes=list(cfg.get("prefixes", [])))
-        for name, cfg in (data.get("projects") or {}).items()
+        Project(name=name, prefixes=list(cfg.get("prefixes", []))) for name, cfg in (data.get("projects") or {}).items()
     ]
     repos_root = Path(str(data.get("repos_root", "~/r"))).expanduser()
     return Config(
