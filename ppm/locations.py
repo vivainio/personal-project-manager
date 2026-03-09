@@ -62,6 +62,21 @@ def repo_name_from_remote(path: Path) -> str | None:
     return None
 
 
+def current_branch(path: Path) -> str | None:
+    """Return the currently checked out branch for the given repo path, or None."""
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=path,
+        )
+        return result.stdout.strip() or None
+    except subprocess.CalledProcessError:
+        return None
+
+
 def cwd_root() -> Path:
     """Return the root of the current git repo."""
     result = subprocess.run(

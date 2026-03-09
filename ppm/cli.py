@@ -49,14 +49,12 @@ def repos(
     table.add_column("Repo", style="bold", no_wrap=True, ratio=3)
     if show_project_col:
         table.add_column("Project", no_wrap=True, ratio=1)
-    table.add_column("Language", no_wrap=True, ratio=1)
     table.add_column("Updated", no_wrap=True, width=11)
     table.add_column("Path", no_wrap=True, ratio=2)
-    table.add_column("Description", ratio=3)
+    table.add_column("Branch", no_wrap=True, ratio=2)
 
     for repo in repo_list:
         name = repo["name"]
-        lang = (repo["primaryLanguage"] or {}).get("name", "")
         updated = repo["updatedAt"][:10]
         visibility = "[dim]🔒[/dim] " if repo["isPrivate"] else ""
         display_name = f"{visibility}{repo['nameWithOwner']}"
@@ -69,15 +67,18 @@ def repos(
 
         if not exists:
             path_str = ""
+            branch_str = ""
         elif override:
             path_str = f"[yellow]{local_path}[/yellow]"
+            branch_str = locations_module.current_branch(local_path) or ""
         else:
             path_str = f"[green]{local_path}[/green]"
+            branch_str = locations_module.current_branch(local_path) or ""
 
         row = [display_name]
         if show_project_col:
             row.append(f"[cyan]{proj}[/cyan]" if proj else "")
-        row += [lang, updated, path_str, repo["description"] or ""]
+        row += [updated, path_str, branch_str]
         table.add_row(*row)
 
     console.print(table)
