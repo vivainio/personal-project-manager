@@ -12,12 +12,8 @@ from ppm import locations as locations_module
 from ppm import repos as repos_module
 
 app = typer.Typer(help="Personal project manager", no_args_is_help=True)
-
-
-@app.callback()
-def main() -> None:
-    pass
-
+projects_app = typer.Typer(help="Manage projects", no_args_is_help=True)
+app.add_typer(projects_app, name="projects")
 
 console = Console()
 
@@ -89,7 +85,6 @@ def repos(
 
 
 def _register_git_dir(git_dir: Path, cfg: config_module.Config) -> None:
-    """Register a single git directory if its path differs from the expected convention."""
     repo_name = locations_module.repo_name_from_remote(git_dir)
     if not repo_name:
         console.print(f"[dim]skip[/dim] {git_dir} (no GitHub remote)")
@@ -126,3 +121,34 @@ def here(
         raise typer.Exit(1)
 
     _register_git_dir(clone_root, cfg)
+
+
+# --- ppm projects ---
+
+@projects_app.command("list")
+def projects_list() -> None:
+    """List configured projects."""
+    cfg = config_module.load()
+    if not cfg.projects:
+        console.print("[dim]No projects configured.[/dim]")
+        return
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Project", style="bold")
+    table.add_column("Prefixes")
+    for project in cfg.projects:
+        table.add_row(project.name, ", ".join(project.prefixes))
+    console.print(table)
+
+
+@projects_app.command("add")
+def projects_add(
+    name: str = typer.Argument(..., help="Project name"),
+    prefix: str = typer.Argument(..., help="Repo name prefix"),
+) -> None:
+    """Add a new project."""
+    try:
+        config_module.add_project(name, prefix)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]Added project[/green] [bold]{name}[/bold] (prefix: {prefix})")
