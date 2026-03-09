@@ -49,13 +49,11 @@ def repos(
     table.add_column("Repo", style="bold", no_wrap=True, ratio=3)
     if show_project_col:
         table.add_column("Project", no_wrap=True, ratio=1)
-    table.add_column("Updated", no_wrap=True, width=11)
     table.add_column("Path", no_wrap=True, ratio=2)
     table.add_column("Branch", no_wrap=True, ratio=2)
 
     for repo in repo_list:
         name = repo["name"]
-        updated = repo["updatedAt"][:10]
         visibility = "[dim]🔒[/dim] " if repo["isPrivate"] else ""
         display_name = f"{visibility}{repo['nameWithOwner']}"
         proj = cfg.project_for(name) or ""
@@ -78,7 +76,7 @@ def repos(
         row = [display_name]
         if show_project_col:
             row.append(f"[cyan]{proj}[/cyan]" if proj else "")
-        row += [updated, path_str, branch_str]
+        row += [path_str, branch_str]
         table.add_row(*row)
 
     console.print(table)
