@@ -1,6 +1,7 @@
 """ppm CLI entry point."""
 
 import fnmatch
+import subprocess
 from pathlib import Path
 
 import typer
@@ -150,3 +151,43 @@ def projects_add(
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
     console.print(f"[green]Added project[/green] [bold]{name}[/bold] (prefix: {prefix})")
+
+
+@app.command()
+def clone(
+    repo: str = typer.Argument(..., help="Repo name or owner/repo"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+) -> None:
+    """Clone a repo to its expected local path."""
+    cfg = config_module.load()
+
+    repo_list = repos_module.get_repos()
+    name_lower = repo.lower()
+    matches = [
+        r for r in repo_list
+        if r["name"].lower() == name_lower or r["nameWithOwner"].lower() == name_lower
+    ]
+
+    if not matches:
+        console.print(f"[red]No repo found matching '{repo}'.[/red]")
+        raise typer.Exit(1)
+    if len(matches) > 1:
+        console.print(f"[yellow]Ambiguous: {', '.join(r['nameWithOwner'] for r in matches)}[/yellow]")
+        raise typer.Exit(1)
+
+    found = matches[0]
+    target = locations_module.expected_path(found["name"], cfg)
+
+    if target.exists():
+        console.print(f"[yellow]Already exists:[/yellow] {target}")
+        raise typer.Exit(1)
+
+    display_target = str(target).replace(str(cfg.repos_root), "~/r", 1)
+    console.print(f"  repo: [bold]{found['nameWithOwner']}[/bold]")
+    console.print(f"  path: [cyan]{display_target}[/cyan]")
+
+    if not yes:
+        typer.confirm("Clone?", abort=True)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["gh", "repo", "clone", found["nameWithOwner"], str(target)], check=True)
