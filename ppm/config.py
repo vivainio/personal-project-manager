@@ -42,6 +42,7 @@ class Config:
     orgs: list[str] = field(default_factory=list)
     projects: list[Project] = field(default_factory=list)
     repos_root: Path = field(default_factory=lambda: Path("~/r").expanduser())
+    zaira: bool = False
 
     def project_for(self, repo_name: str) -> str | None:
         """Return the project name for a repo name, or None if unmatched."""
@@ -80,4 +81,9 @@ def load() -> Config:
         for name, cfg in (data.get("projects") or {}).items()
     ]
     repos_root = Path(str(data.get("repos_root", "~/r"))).expanduser()
-    return Config(orgs=list(data.get("orgs", [])), projects=projects, repos_root=repos_root)
+    return Config(
+        orgs=list(data.get("orgs", [])),
+        projects=projects,
+        repos_root=repos_root,
+        zaira=bool(data.get("zaira", False)),
+    )

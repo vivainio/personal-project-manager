@@ -292,6 +292,20 @@ def clone(
 _TICKET_RE = re.compile(r"([A-Z]+-\d+)", re.IGNORECASE)
 
 
+def _zaira_summary(ticket_id: str) -> str | None:
+    """Fetch ticket summary via zaira get --min, parsing the YAML front matter."""
+    result = subprocess.run(
+        ["zaira", "get", ticket_id, "--min"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        if line.startswith("summary:"):
+            return line[len("summary:"):].strip()
+    return None
+
+
 @app.command()
 def tickets(
     filter: str = typer.Argument(None, help="Project name or repo pattern to scope search"),
@@ -328,6 +342,10 @@ def tickets(
         return
 
     for ticket, entries in sorted(by_ticket.items()):
-        console.print(f"[bold cyan]{ticket}[/bold cyan]")
+        summary = _zaira_summary(ticket) if cfg.zaira else None
+        header = f"[bold cyan]{ticket}[/bold cyan]"
+        if summary:
+            header += f"  {summary}"
+        console.print(header)
         for repo_name, branch in entries:
             console.print(f"  [bold]{repo_name}[/bold]  [dim]{branch}[/dim]")
