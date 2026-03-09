@@ -66,11 +66,10 @@ def repos(
         if not exists:
             path_str = ""
             branch_str = ""
-        elif override:
-            path_str = f"[yellow]{local_path}[/yellow]"
-            branch_str = locations_module.current_branch(local_path) or ""
         else:
-            path_str = f"[green]{local_path}[/green]"
+            display_path = str(local_path).replace(str(cfg.repos_root), "~/r", 1)
+            color = "yellow" if override else "green"
+            path_str = f"[{color}]{display_path}[/{color}]"
             branch_str = locations_module.current_branch(local_path) or ""
 
         row = [display_name]
