@@ -245,10 +245,7 @@ def clone(
     console.print(f"  path: [cyan]{display_target}[/cyan]")
 
     if not yes:
-        confirmed = typer.confirm("Clone?")
-        if not confirmed:
-            console.print("[dim]Tip: pass --yes to skip this prompt.[/dim]")
-            raise typer.Exit()
+        typer.confirm("Clone? (--yes to skip)", abort=True)
 
     repo_owner = found["nameWithOwner"].split("/")[0]
     accounts = gh_auth_module.get_accounts()
