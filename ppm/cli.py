@@ -191,7 +191,8 @@ def pr(
                 console.print(f"  [bold]{author}[/bold]")
                 for p in prs:
                     age = _pr_age(p["createdAt"])
-                    console.print(f"    [dim]#{p['number']} {age}[/dim]  {p['title']}")
+                    num = f"#{p['number']}"
+                    console.print(f"    [dim]{num:<6} {age:<5}[/dim] {p['title']}")
                     total += 1
 
     console.print(f"\n[dim]{total} open PRs[/dim]")
