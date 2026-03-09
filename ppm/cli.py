@@ -9,6 +9,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
+import importlib.metadata
+
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -22,6 +24,20 @@ from ppm import repos as repos_module
 app = typer.Typer(help="Personal project manager", no_args_is_help=True)
 projects_app = typer.Typer(help="Manage projects", no_args_is_help=True)
 app.add_typer(projects_app, name="projects")
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        version = importlib.metadata.version("personal-project-manager")
+        typer.echo(f"ppm {version}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(None, "--version", "-V", callback=_version_callback, is_eager=True, help="Show version and exit"),
+) -> None:
+    pass
 
 console = Console()
 
