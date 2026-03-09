@@ -4,6 +4,7 @@ import fnmatch
 import json
 import subprocess
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import typer
@@ -141,36 +142,33 @@ def pr(
     repo_list = repos_module.get_repos()
     project_repos = [r for r in repo_list if cfg.project_for(r["name"]) == project]
 
-    grouped: dict[str, dict[str, list[dict]]] = {}
-
-    total = 0
-    for repo in project_repos:
+    def fetch(repo: dict) -> tuple[str, dict[str, list[dict]]]:
         result = subprocess.run(
-            [
-                "gh", "pr", "list",
-                "--repo", repo["nameWithOwner"],
-                "--json", "number,title,author,headRefName",
-            ],
-            capture_output=True,
-            text=True,
+            ["gh", "pr", "list", "--repo", repo["nameWithOwner"],
+             "--json", "number,title,author,headRefName"],
+            capture_output=True, text=True,
         )
         if result.returncode != 0 or not result.stdout.strip():
-            continue
+            return repo["name"], {}
         prs = json.loads(result.stdout)
-        if not prs:
-            continue
         by_author: dict[str, list[dict]] = defaultdict(list)
         for p in prs:
             by_author[p["author"]["login"]].append(p)
-            total += 1
-        grouped[repo["name"]] = dict(by_author)
+        return repo["name"], dict(by_author)
 
-    for repo_name, by_author in grouped.items():
-        console.print(f"\n[bold cyan]{repo_name}[/bold cyan]")
-        for author, prs in by_author.items():
-            console.print(f"  [bold]{author}[/bold]")
-            for p in prs:
-                console.print(f"    [dim]#{p['number']}[/dim]  {p['title']}")
+    total = 0
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(fetch, repo): repo for repo in project_repos}
+        for future in as_completed(futures):
+            repo_name, by_author = future.result()
+            if not by_author:
+                continue
+            console.print(f"\n[bold cyan]{repo_name}[/bold cyan]")
+            for author, prs in by_author.items():
+                console.print(f"  [bold]{author}[/bold]")
+                for p in prs:
+                    console.print(f"    [dim]#{p['number']}[/dim]  {p['title']}")
+                    total += 1
 
     console.print(f"\n[dim]{total} open PRs[/dim]")
 
