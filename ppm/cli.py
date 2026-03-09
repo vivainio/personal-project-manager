@@ -134,17 +134,22 @@ def here(
 
 @app.command()
 def pr(
-    project: str = typer.Argument(..., help="Project name"),
+    target: str = typer.Argument(..., help="Project name or repo name/pattern"),
 ) -> None:
-    """List open pull requests for all repos in a project."""
+    """List open pull requests for a project or repo."""
     cfg = config_module.load()
-    project_names = {p.name for p in cfg.projects}
-    if project not in project_names:
-        console.print(f"[red]Unknown project '{project}'.[/red]")
-        raise typer.Exit(1)
-
     repo_list = repos_module.get_repos()
-    project_repos = [r for r in repo_list if cfg.project_for(r["name"]) == project]
+    project_names = {p.name for p in cfg.projects}
+
+    if target in project_names:
+        project_repos = [r for r in repo_list if cfg.project_for(r["name"]) == target]
+    else:
+        target_lower = target.lower()
+        pat = target_lower if "*" in target_lower or "?" in target_lower else f"*{target_lower}*"
+        project_repos = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat)]
+        if not project_repos:
+            console.print(f"[red]No project or repo found matching '{target}'.[/red]")
+            raise typer.Exit(1)
 
     def fetch(repo: dict) -> tuple[str, dict[str, list[dict]]]:
         result = subprocess.run(
