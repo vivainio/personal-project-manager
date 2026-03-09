@@ -214,16 +214,23 @@ def clone(
 
     repo_list = repos_module.get_repos()
     name_lower = repo.lower()
+
+    # Try exact match first, then fall back to substring
     matches = [
         r for r in repo_list
         if r["name"].lower() == name_lower or r["nameWithOwner"].lower() == name_lower
     ]
+    if not matches:
+        pat = name_lower if "*" in name_lower or "?" in name_lower else f"*{name_lower}*"
+        matches = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat)]
 
     if not matches:
         console.print(f"[red]No repo found matching '{repo}'.[/red]")
         raise typer.Exit(1)
     if len(matches) > 1:
-        console.print(f"[yellow]Ambiguous: {', '.join(r['nameWithOwner'] for r in matches)}[/yellow]")
+        console.print("[yellow]Multiple matches — be more specific:[/yellow]")
+        for r in matches:
+            console.print(f"  {r['nameWithOwner']}")
         raise typer.Exit(1)
 
     found = matches[0]
