@@ -283,4 +283,6 @@ def clone(
         console.print(f"[dim]switched gh account → {new_active.username}[/dim]")
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["gh", "repo", "clone", found["nameWithOwner"], str(target)], check=True)
+    cmd = gh_auth_module.clone_cmd(found["nameWithOwner"], str(target))
+    console.print(f"[dim]{' '.join(cmd)}[/dim]")
+    subprocess.run(cmd, check=True)

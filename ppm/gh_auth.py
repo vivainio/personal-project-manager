@@ -2,6 +2,7 @@
 
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 
 
@@ -36,6 +37,25 @@ def get_accounts() -> list[GhAccount]:
 
 def active_account(accounts: list[GhAccount]) -> GhAccount | None:
     return next((a for a in accounts if a.active), None)
+
+
+def ssh_available() -> bool:
+    """Return True if SSH auth to GitHub works (Linux only)."""
+    if sys.platform != "linux":
+        return False
+    result = subprocess.run(
+        ["ssh", "-T", "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=yes", "git@github.com"],
+        capture_output=True,
+        text=True,
+    )
+    return "successfully authenticated" in result.stderr
+
+
+def clone_cmd(name_with_owner: str, target: str) -> list[str]:
+    """Return the best clone command for the current environment."""
+    if ssh_available():
+        return ["git", "clone", f"git@github.com:{name_with_owner}.git", target]
+    return ["gh", "repo", "clone", name_with_owner, target]
 
 
 def ensure_org_account(orgs: list[str], repo_owner: str) -> bool:
