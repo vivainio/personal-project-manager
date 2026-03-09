@@ -3,6 +3,7 @@
 import fnmatch
 import json
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 
 import typer
@@ -140,12 +141,7 @@ def pr(
     repo_list = repos_module.get_repos()
     project_repos = [r for r in repo_list if cfg.project_for(r["name"]) == project]
 
-    table = Table(show_header=True, header_style="bold cyan", expand=True)
-    table.add_column("Repo", style="bold", no_wrap=True, ratio=2)
-    table.add_column("#", no_wrap=True, width=6)
-    table.add_column("Author", no_wrap=True, ratio=2)
-    table.add_column("Branch", no_wrap=True, ratio=3)
-    table.add_column("Title", ratio=4)
+    grouped: dict[str, dict[str, list[dict]]] = {}
 
     total = 0
     for repo in project_repos:
@@ -161,18 +157,22 @@ def pr(
         if result.returncode != 0 or not result.stdout.strip():
             continue
         prs = json.loads(result.stdout)
+        if not prs:
+            continue
+        by_author: dict[str, list[dict]] = defaultdict(list)
         for p in prs:
-            table.add_row(
-                repo["name"],
-                str(p["number"]),
-                p["author"]["login"],
-                p["headRefName"],
-                p["title"],
-            )
+            by_author[p["author"]["login"]].append(p)
             total += 1
+        grouped[repo["name"]] = dict(by_author)
 
-    console.print(table)
-    console.print(f"[dim]{total} open PRs[/dim]")
+    for repo_name, by_author in grouped.items():
+        console.print(f"\n[bold cyan]{repo_name}[/bold cyan]")
+        for author, prs in by_author.items():
+            console.print(f"  [bold]{author}[/bold]")
+            for p in prs:
+                console.print(f"    [dim]#{p['number']}[/dim]  {p['title']}")
+
+    console.print(f"\n[dim]{total} open PRs[/dim]")
 
 
 # --- ppm projects ---
