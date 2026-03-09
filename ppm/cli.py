@@ -13,6 +13,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from ppm import cache as cache_module
 from ppm import config as config_module
 from ppm import gh_auth as gh_auth_module
 from ppm import locations as locations_module
@@ -293,17 +294,25 @@ _TICKET_RE = re.compile(r"([A-Z]+-\d+)", re.IGNORECASE)
 
 
 def _zaira_summary(ticket_id: str) -> str | None:
-    """Fetch ticket summary via zaira get --min, parsing the YAML front matter."""
+    """Return ticket summary, fetching via zaira and caching permanently."""
+    cached: dict[str, str] = cache_module.get("tickets", ttl=10**9) or {}
+    if ticket_id in cached:
+        return cached[ticket_id]
     result = subprocess.run(
         ["zaira", "get", ticket_id, "--min"],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
         return None
+    summary = None
     for line in result.stdout.splitlines():
         if line.startswith("summary:"):
-            return line[len("summary:"):].strip()
-    return None
+            summary = line[len("summary:"):].strip()
+            break
+    if summary:
+        cached[ticket_id] = summary
+        cache_module.set("tickets", cached)
+    return summary
 
 
 @app.command()
