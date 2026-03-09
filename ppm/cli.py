@@ -2,6 +2,7 @@
 
 import fnmatch
 import json
+import re
 import subprocess
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -286,3 +287,47 @@ def clone(
     cmd = gh_auth_module.clone_cmd(found["nameWithOwner"], str(target))
     console.print(f"[dim]{' '.join(cmd)}[/dim]")
     subprocess.run(cmd, check=True)
+
+
+_TICKET_RE = re.compile(r"([A-Z]+-\d+)", re.IGNORECASE)
+
+
+@app.command()
+def tickets(
+    filter: str = typer.Argument(None, help="Project name or repo pattern to scope search"),
+) -> None:
+    """Show tickets (branch names with ticket IDs) checked out across local repos."""
+    cfg = config_module.load()
+    repo_list = repos_module.get_repos()
+
+    if filter:
+        project_names = {p.name for p in cfg.projects}
+        if filter in project_names:
+            repo_list = [r for r in repo_list if cfg.project_for(r["name"]) == filter]
+        else:
+            pat = filter if "*" in filter or "?" in filter else f"*{filter}*"
+            repo_list = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat.lower())]
+
+    # ticket_id → [(repo_name, branch)]
+    by_ticket: dict[str, list[tuple[str, str]]] = defaultdict(list)
+
+    for repo in repo_list:
+        local_path = locations_module.resolve_path(repo["name"], cfg)
+        if not local_path.exists():
+            continue
+        branch = locations_module.current_branch(local_path)
+        if not branch:
+            continue
+        match = _TICKET_RE.search(branch)
+        if match:
+            ticket = match.group(1).upper()
+            by_ticket[ticket].append((repo["name"], branch))
+
+    if not by_ticket:
+        console.print("[dim]No checked-out ticket branches found.[/dim]")
+        return
+
+    for ticket, entries in sorted(by_ticket.items()):
+        console.print(f"[bold cyan]{ticket}[/bold cyan]")
+        for repo_name, branch in entries:
+            console.print(f"  [bold]{repo_name}[/bold]  [dim]{branch}[/dim]")
