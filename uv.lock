@@ -54,7 +54,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ppm"
+name = "personal-project-manager"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
