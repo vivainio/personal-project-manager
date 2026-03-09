@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
+from ruamel.yaml import YAML
 
 CONFIG_PATH = Path.home() / ".config" / "ppm" / "config.yaml"
 
@@ -27,6 +27,9 @@ orgs:
 #       - som-
 """
 
+_yaml = YAML()
+_yaml.preserve_quotes = True
+
 
 @dataclass
 class Project:
@@ -48,15 +51,33 @@ class Config:
         return None
 
 
-def load() -> Config:
+def _read() -> dict:
     if not CONFIG_PATH.exists():
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_PATH.write_text(DEFAULT_CONFIG)
+    return _yaml.load(CONFIG_PATH) or {}
 
-    data = yaml.safe_load(CONFIG_PATH.read_text()) or {}
+
+def _write(data: dict) -> None:
+    with CONFIG_PATH.open("w") as f:
+        _yaml.dump(data, f)
+
+
+def add_project(name: str, prefix: str) -> None:
+    """Add a new project entry to the config file, preserving comments."""
+    data = _read()
+    projects = data.setdefault("projects", {})
+    if name in projects:
+        raise ValueError(f"Project '{name}' already exists")
+    projects[name] = {"prefixes": [prefix]}
+    _write(data)
+
+
+def load() -> Config:
+    data = _read()
     projects = [
-        Project(name=name, prefixes=cfg.get("prefixes", []))
+        Project(name=name, prefixes=list(cfg.get("prefixes", [])))
         for name, cfg in (data.get("projects") or {}).items()
     ]
-    repos_root = Path(data.get("repos_root", "~/r")).expanduser()
-    return Config(orgs=data.get("orgs", []), projects=projects, repos_root=repos_root)
+    repos_root = Path(str(data.get("repos_root", "~/r"))).expanduser()
+    return Config(orgs=list(data.get("orgs", [])), projects=projects, repos_root=repos_root)
