@@ -1,6 +1,7 @@
 """ppm CLI entry point."""
 
 import fnmatch
+import json
 import subprocess
 from pathlib import Path
 
@@ -121,6 +122,57 @@ def here(
         raise typer.Exit(1)
 
     _register_git_dir(clone_root, cfg)
+
+
+# --- ppm pr ---
+
+@app.command()
+def pr(
+    project: str = typer.Argument(..., help="Project name"),
+) -> None:
+    """List open pull requests for all repos in a project."""
+    cfg = config_module.load()
+    project_names = {p.name for p in cfg.projects}
+    if project not in project_names:
+        console.print(f"[red]Unknown project '{project}'.[/red]")
+        raise typer.Exit(1)
+
+    repo_list = repos_module.get_repos()
+    project_repos = [r for r in repo_list if cfg.project_for(r["name"]) == project]
+
+    table = Table(show_header=True, header_style="bold cyan", expand=True)
+    table.add_column("Repo", style="bold", no_wrap=True, ratio=2)
+    table.add_column("#", no_wrap=True, width=6)
+    table.add_column("Author", no_wrap=True, ratio=2)
+    table.add_column("Branch", no_wrap=True, ratio=3)
+    table.add_column("Title", ratio=4)
+
+    total = 0
+    for repo in project_repos:
+        result = subprocess.run(
+            [
+                "gh", "pr", "list",
+                "--repo", repo["nameWithOwner"],
+                "--json", "number,title,author,headRefName",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            continue
+        prs = json.loads(result.stdout)
+        for p in prs:
+            table.add_row(
+                repo["name"],
+                str(p["number"]),
+                p["author"]["login"],
+                p["headRefName"],
+                p["title"],
+            )
+            total += 1
+
+    console.print(table)
+    console.print(f"[dim]{total} open PRs[/dim]")
 
 
 # --- ppm projects ---
