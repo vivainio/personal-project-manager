@@ -5,6 +5,7 @@ import json
 import subprocess
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
@@ -130,6 +131,19 @@ def here(
     _register_git_dir(clone_root, cfg)
 
 
+def _pr_age(created_at: str) -> str:
+    created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    days = (datetime.now(timezone.utc) - created).days
+    if days == 0:
+        return "today"
+    if days == 1:
+        return "1d"
+    if days < 30:
+        return f"{days}d"
+    months = days // 30
+    return f"{months}mo"
+
+
 # --- ppm pr ---
 
 @app.command()
@@ -154,7 +168,7 @@ def pr(
     def fetch(repo: dict) -> tuple[str, dict[str, list[dict]]]:
         result = subprocess.run(
             ["gh", "pr", "list", "--repo", repo["nameWithOwner"],
-             "--json", "number,title,author,headRefName"],
+             "--json", "number,title,author,headRefName,createdAt"],
             capture_output=True, text=True,
         )
         if result.returncode != 0 or not result.stdout.strip():
@@ -176,7 +190,8 @@ def pr(
             for author, prs in by_author.items():
                 console.print(f"  [bold]{author}[/bold]")
                 for p in prs:
-                    console.print(f"    [dim]#{p['number']}[/dim]  {p['title']}")
+                    age = _pr_age(p["createdAt"])
+                    console.print(f"    [dim]#{p['number']} {age}[/dim]  {p['title']}")
                     total += 1
 
     console.print(f"\n[dim]{total} open PRs[/dim]")
