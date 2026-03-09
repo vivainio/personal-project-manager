@@ -49,13 +49,15 @@ def repos(
             repo_list = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat.lower())]
 
     show_project_col = bool(cfg.projects) and not active_project
+    show_branch = bool(filter)
 
     table = Table(show_header=True, header_style="bold cyan", expand=True)
     table.add_column("Repo", style="bold", no_wrap=True, ratio=3)
     if show_project_col:
         table.add_column("Project", no_wrap=True, ratio=1)
     table.add_column("Path", no_wrap=True, ratio=2)
-    table.add_column("Branch", no_wrap=True, ratio=2)
+    if show_branch:
+        table.add_column("Branch", no_wrap=True, ratio=2)
 
     for repo in repo_list:
         name = repo["name"]
@@ -75,12 +77,14 @@ def repos(
             display_path = str(local_path).replace(str(cfg.repos_root), "~/r", 1)
             color = "yellow" if override else "green"
             path_str = f"[{color}]{display_path}[/{color}]"
-            branch_str = locations_module.current_branch(local_path) or ""
+            branch_str = locations_module.current_branch(local_path) or "" if show_branch else ""
 
         row = [display_name]
         if show_project_col:
             row.append(f"[cyan]{proj}[/cyan]" if proj else "")
-        row += [path_str, branch_str]
+        row.append(path_str)
+        if show_branch:
+            row.append(branch_str)
         table.add_row(*row)
 
     console.print(table)
