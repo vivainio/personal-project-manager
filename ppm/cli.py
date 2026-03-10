@@ -216,15 +216,19 @@ def mv(
             console.print("[dim]No misplaced repos found in subdirectories.[/dim]")
             return
 
-        root_str = str(cfg.repos_root)
+        root_str = str(cfg.repos_root) + "/"
+        table = Table(show_header=False, box=None, padding=(0, 1))
+        table.add_column(style="yellow", no_wrap=True)
+        table.add_column(no_wrap=True)
+        table.add_column(no_wrap=True)
         for repo_name, current in candidates:
             expected = locations_module.expected_path(repo_name, cfg)
-            display_from = str(current).replace(root_str, "~/r", 1)
-            display_to = str(expected).replace(root_str, "~/r", 1)
+            rel_to = str(expected).removeprefix(root_str)
             if expected.exists():
-                console.print(f"[bold]{repo_name}[/bold]  [yellow]{display_from}[/yellow] → [red]destination exists, skip[/red]")
+                table.add_row(current.name, "→", "[red]exists, skip[/red]")
             else:
-                console.print(f"[bold]{repo_name}[/bold]  [yellow]{display_from}[/yellow] → [cyan]{display_to}[/cyan]")
+                table.add_row(current.name, "→", f"[cyan]{rel_to}[/cyan]")
+        console.print(table)
 
         movable = [(n, p) for n, p in candidates if not locations_module.expected_path(n, cfg).exists()]
         if not movable:
