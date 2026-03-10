@@ -172,13 +172,76 @@ def here(
     _register_git_dir(clone_root, cfg)
 
 
+def _mv_one(repo_name: str, current: Path, cfg: config_module.Config) -> str | None:
+    """Validate and perform a single repo move. Returns error string or None on success."""
+    expected = locations_module.expected_path(repo_name, cfg)
+    if current == expected:
+        return f"{repo_name}: already at canonical path"
+    try:
+        Path.cwd().relative_to(current)
+        return f"{repo_name}: cannot move while inside the repo — cd out first"
+    except ValueError:
+        pass
+    if expected.exists():
+        return f"{repo_name}: destination already exists: {expected}"
+    expected.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(current), str(expected))
+    locations_module.clear_location(repo_name)
+    return None
+
+
 @app.command()
 def mv(
-    repo: str = typer.Argument(None, help="Repo name (defaults to current directory's repo)"),
+    repo: str = typer.Argument(None, help="Repo name, '.' to scan subdirs, or omit for current repo"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ) -> None:
-    """Move a repo from its current location to its expected canonical path."""
+    """Move a repo (or subdirectory repos) to their expected canonical paths."""
     cfg = config_module.load()
+
+    if repo == ".":
+        cwd = Path.cwd()
+        candidates: list[tuple[str, Path]] = []
+        for subdir in sorted(cwd.iterdir()):
+            if not subdir.is_dir() or not (subdir / ".git").exists():
+                continue
+            repo_name = locations_module.repo_name_from_remote(subdir)
+            if not repo_name:
+                continue
+            expected = locations_module.expected_path(repo_name, cfg)
+            if subdir.resolve() == expected.resolve():
+                continue
+            candidates.append((repo_name, subdir))
+
+        if not candidates:
+            console.print("[dim]No misplaced repos found in subdirectories.[/dim]")
+            return
+
+        root_str = str(cfg.repos_root)
+        for repo_name, current in candidates:
+            expected = locations_module.expected_path(repo_name, cfg)
+            display_from = str(current).replace(root_str, "~/r", 1)
+            display_to = str(expected).replace(root_str, "~/r", 1)
+            if expected.exists():
+                console.print(f"[bold]{repo_name}[/bold]  [yellow]{display_from}[/yellow] → [red]destination exists, skip[/red]")
+            else:
+                console.print(f"[bold]{repo_name}[/bold]  [yellow]{display_from}[/yellow] → [cyan]{display_to}[/cyan]")
+
+        movable = [(n, p) for n, p in candidates if not locations_module.expected_path(n, cfg).exists()]
+        if not movable:
+            return
+
+        if not yes:
+            typer.confirm(f"Move {len(movable)} repo(s)? (--yes to skip)", abort=True)
+
+        for repo_name, current in movable:
+            err = _mv_one(repo_name, current, cfg)
+            if err:
+                console.print(f"[red]{err}[/red]")
+            else:
+                expected = locations_module.expected_path(repo_name, cfg)
+                display_to = str(expected).replace(root_str, "~/r", 1)
+                console.print(f"[green]moved[/green] [bold]{repo_name}[/bold] → {display_to}")
+        return
 
     if repo is None:
         try:
@@ -194,38 +257,40 @@ def mv(
         repo_name = repo
         current = locations_module.resolve_path(repo_name, cfg)
 
-    expected = locations_module.expected_path(repo_name, cfg)
-
     if not current.exists():
         console.print(f"[red]Repo not found locally:[/red] {current}")
         raise typer.Exit(1)
+
+    expected = locations_module.expected_path(repo_name, cfg)
+    root_str = str(cfg.repos_root)
+    display_from = str(current).replace(root_str, "~/r", 1)
+    display_to = str(expected).replace(root_str, "~/r", 1)
+
+    if current == expected:
+        console.print(f"[dim]{repo_name} is already at its canonical path.[/dim]")
+        return
 
     try:
         Path.cwd().relative_to(current)
         console.print(f"[red]Cannot move: you are inside the repo.[/red] cd out first.")
         raise typer.Exit(1)
     except ValueError:
-        pass  # cwd is not inside current — safe to move
-
-    if current == expected:
-        console.print(f"[dim]{repo_name} is already at its canonical path.[/dim]")
-        return
-
-    display_from = str(current).replace(str(cfg.repos_root), "~/r", 1)
-    display_to = str(expected).replace(str(cfg.repos_root), "~/r", 1)
-    console.print(f"  from: [yellow]{display_from}[/yellow]")
-    console.print(f"    to: [cyan]{display_to}[/cyan]")
+        pass
 
     if expected.exists():
         console.print(f"[red]Destination already exists:[/red] {expected}")
         raise typer.Exit(1)
 
+    console.print(f"  from: [yellow]{display_from}[/yellow]")
+    console.print(f"    to: [cyan]{display_to}[/cyan]")
+
     if not yes:
         typer.confirm("Move? (--yes to skip)", abort=True)
 
-    expected.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(current), str(expected))
-    locations_module.clear_location(repo_name)
+    err = _mv_one(repo_name, current, cfg)
+    if err:
+        console.print(f"[red]{err}[/red]")
+        raise typer.Exit(1)
     console.print(f"[green]moved[/green] [bold]{repo_name}[/bold] → {display_to}")
 
 
