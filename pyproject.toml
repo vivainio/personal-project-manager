@@ -15,6 +15,10 @@ ppm = "ppm.cli:app"
 [tool.uv]
 package = true
 
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
+
 [tool.setuptools.packages.find]
 include = ["ppm*"]
 
