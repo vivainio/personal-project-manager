@@ -10,7 +10,6 @@ DEFAULT_TTL = 3600  # 1 hour
 
 
 def _cache_path(key: str) -> Path:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     return CACHE_DIR / f"{key}.json"
 
 
@@ -24,6 +23,7 @@ def get(key: str, ttl: int = DEFAULT_TTL) -> Any | None:
 
 
 def set(key: str, data: Any) -> None:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     _cache_path(key).write_text(json.dumps(data))
 
 

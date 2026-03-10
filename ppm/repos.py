@@ -2,6 +2,8 @@
 
 import json
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import TypedDict
 
 from ppm import cache, config
@@ -32,10 +34,11 @@ def _gh_repo_list(owner: str | None = None, limit: int = 1000) -> list[Repo]:
 
 def fetch_repos(limit: int = 1000) -> list[Repo]:
     cfg = config.load()
-    repos = _gh_repo_list(limit=limit)
-    for org in cfg.orgs:
-        repos += _gh_repo_list(owner=org, limit=limit)
-    return repos
+    owners: list[str | None] = [None, *cfg.orgs]
+    fetch = partial(_gh_repo_list, limit=limit)
+    with ThreadPoolExecutor(max_workers=len(owners)) as pool:
+        results = pool.map(fetch, owners)
+    return [repo for batch in results for repo in batch]
 
 
 def get_repos(refresh: bool = False) -> list[Repo]:

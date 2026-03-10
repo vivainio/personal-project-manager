@@ -46,6 +46,19 @@ def main(
 console = Console()
 
 
+def _glob_pat(s: str) -> str:
+    return s if "*" in s or "?" in s else f"*{s}*"
+
+
+def _filter_repos(repo_list: list, value: str, cfg: config_module.Config) -> list:
+    """Filter repos by project name (exact) or glob pattern (substring)."""
+    project_names = {p.name for p in cfg.projects}
+    if value in project_names:
+        return [r for r in repo_list if cfg.project_for(r["name"]) == value]
+    pat = _glob_pat(value.lower())
+    return [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat)]
+
+
 @app.command()
 def repos(
     refresh: bool = typer.Option(False, "--refresh", "-r", help="Bypass cache and re-fetch"),
@@ -75,10 +88,7 @@ def repos(
     if filter:
         if filter in project_names:
             active_project = filter
-            repo_list = [r for r in repo_list if cfg.project_for(r["name"]) == filter]
-        else:
-            pat = filter if "*" in filter or "?" in filter else f"*{filter}*"
-            repo_list = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat.lower())]
+        repo_list = _filter_repos(repo_list, filter, cfg)
 
     show_project_col = bool(cfg.projects) and not active_project
     show_branch = bool(filter)
@@ -163,7 +173,7 @@ def here(
 
 
 def _pr_age(created_at: str) -> str:
-    created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    created = datetime.fromisoformat(created_at)
     days = (datetime.now(UTC) - created).days
     if days == 0:
         return "today"
@@ -187,15 +197,10 @@ def pr(
     repo_list = repos_module.get_repos()
     project_names = {p.name for p in cfg.projects}
 
-    if target in project_names:
-        project_repos = [r for r in repo_list if cfg.project_for(r["name"]) == target]
-    else:
-        target_lower = target.lower()
-        pat = target_lower if "*" in target_lower or "?" in target_lower else f"*{target_lower}*"
-        project_repos = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat)]
-        if not project_repos:
-            console.print(f"[red]No project or repo found matching '{target}'.[/red]")
-            raise typer.Exit(1)
+    project_repos = _filter_repos(repo_list, target, cfg)
+    if not project_repos:
+        console.print(f"[red]No project or repo found matching '{target}'.[/red]")
+        raise typer.Exit(1)
 
     def fetch(repo: dict) -> tuple[str, dict[str, list[dict]]]:
         result = subprocess.run(
@@ -284,8 +289,7 @@ def clone(
     # Try exact match first, then fall back to substring
     matches = [r for r in repo_list if r["name"].lower() == name_lower or r["nameWithOwner"].lower() == name_lower]
     if not matches:
-        pat = name_lower if "*" in name_lower or "?" in name_lower else f"*{name_lower}*"
-        matches = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat)]
+        matches = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), _glob_pat(name_lower))]
 
     if not matches:
         console.print(f"[red]No repo found matching '{repo}'.[/red]")
@@ -313,7 +317,7 @@ def clone(
     repo_owner = found["nameWithOwner"].split("/")[0]
     accounts = gh_auth_module.get_accounts()
     active = gh_auth_module.active_account(accounts)
-    if not gh_auth_module.ensure_org_account(cfg.orgs, repo_owner):
+    if not gh_auth_module.ensure_org_account(cfg.orgs, repo_owner, accounts):
         console.print("[red]No gh account with underscore found for org repos.[/red]")
         raise typer.Exit(1)
     new_active = gh_auth_module.active_account(gh_auth_module.get_accounts())
@@ -409,12 +413,7 @@ def tickets_list(
     repo_list = repos_module.get_repos()
 
     if filter:
-        project_names = {p.name for p in cfg.projects}
-        if filter in project_names:
-            repo_list = [r for r in repo_list if cfg.project_for(r["name"]) == filter]
-        else:
-            pat = filter if "*" in filter or "?" in filter else f"*{filter}*"
-            repo_list = [r for r in repo_list if fnmatch.fnmatch(r["name"].lower(), pat.lower())]
+        repo_list = _filter_repos(repo_list, filter, cfg)
 
     by_ticket: dict[str, list[tuple[str, str]]] = defaultdict(list)
 

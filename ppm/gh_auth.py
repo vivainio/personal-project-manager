@@ -58,7 +58,7 @@ def clone_cmd(name_with_owner: str, target: str) -> list[str]:
     return ["gh", "repo", "clone", name_with_owner, target]
 
 
-def ensure_org_account(orgs: list[str], repo_owner: str) -> bool:
+def ensure_org_account(orgs: list[str], repo_owner: str, accounts: list[GhAccount] | None = None) -> bool:
     """If repo_owner is a configured org, ensure the underscore account is active.
 
     Returns True if the account is correct or was switched, False if no suitable account found.
@@ -66,7 +66,8 @@ def ensure_org_account(orgs: list[str], repo_owner: str) -> bool:
     if repo_owner not in orgs:
         return True
 
-    accounts = get_accounts()
+    if accounts is None:
+        accounts = get_accounts()
     active = active_account(accounts)
 
     if active and "_" in active.username:
