@@ -115,10 +115,7 @@ ppm projects add foo foo-  # Add a project
 
 ## Multiple GitHub Accounts
 
-`ppm` handles multiple `gh` CLI accounts automatically:
-
-- When listing repos or cloning **org repos**, it switches to the account with `_` in the username (corporate account)
-- When cloning from a personal account, it uses the account without `_`
+`ppm` handles multiple `gh` CLI accounts automatically, switching to the appropriate account when accessing org repos.
 
 ## Zaira Integration
 
