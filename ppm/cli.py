@@ -172,6 +172,56 @@ def here(
     _register_git_dir(clone_root, cfg)
 
 
+@app.command()
+def mv(
+    repo: str = typer.Argument(None, help="Repo name (defaults to current directory's repo)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+) -> None:
+    """Move a repo from its current location to its expected canonical path."""
+    cfg = config_module.load()
+
+    if repo is None:
+        try:
+            current = locations_module.cwd_root()
+            repo_name = locations_module.repo_name_from_remote(current)
+        except Exception:
+            console.print("[red]Not inside a git repository.[/red]")
+            raise typer.Exit(1)
+        if not repo_name:
+            console.print("[red]Could not determine repo name from git remote.[/red]")
+            raise typer.Exit(1)
+    else:
+        repo_name = repo
+        current = locations_module.resolve_path(repo_name, cfg)
+
+    expected = locations_module.expected_path(repo_name, cfg)
+
+    if not current.exists():
+        console.print(f"[red]Repo not found locally:[/red] {current}")
+        raise typer.Exit(1)
+
+    if current == expected:
+        console.print(f"[dim]{repo_name} is already at its canonical path.[/dim]")
+        return
+
+    display_from = str(current).replace(str(cfg.repos_root), "~/r", 1)
+    display_to = str(expected).replace(str(cfg.repos_root), "~/r", 1)
+    console.print(f"  from: [yellow]{display_from}[/yellow]")
+    console.print(f"    to: [cyan]{display_to}[/cyan]")
+
+    if expected.exists():
+        console.print(f"[red]Destination already exists:[/red] {expected}")
+        raise typer.Exit(1)
+
+    if not yes:
+        typer.confirm("Move? (--yes to skip)", abort=True)
+
+    expected.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(current), str(expected))
+    locations_module.clear_location(repo_name)
+    console.print(f"[green]moved[/green] [bold]{repo_name}[/bold] → {display_to}")
+
+
 def _pr_age(created_at: str) -> str:
     created = datetime.fromisoformat(created_at)
     days = (datetime.now(UTC) - created).days

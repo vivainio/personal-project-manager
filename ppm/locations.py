@@ -23,6 +23,14 @@ def set_location(repo_name: str, path: Path) -> None:
     _save(data)
 
 
+def clear_location(repo_name: str) -> None:
+    """Remove any cached location override for a repo."""
+    data = _load()
+    if repo_name in data:
+        del data[repo_name]
+        _save(data)
+
+
 def get_location(repo_name: str) -> Path | None:
     """Return the cached non-standard path, or None if using default."""
     return Path(data[repo_name]) if (data := _load()) and repo_name in data else None
