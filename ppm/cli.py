@@ -3,7 +3,9 @@
 import fnmatch
 import importlib.metadata
 import json
+import os
 import re
+import shutil
 import subprocess
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -324,13 +326,52 @@ def clone(
     subprocess.run(cmd, check=True)
 
 
-_TICKET_RE = re.compile(r"([A-Z]+-\d+)", re.IGNORECASE)
+_TICKET_RE = re.compile(r"\b([A-Z]{2,}-\d{2,})\b")
 
 
-def _zaira_summary(ticket_id: str) -> str | None:
+def _parse_front_matter(text: str) -> dict[str, str]:
+    """Parse YAML front matter from a markdown string. Returns key/value pairs."""
+    if not text.startswith("---"):
+        return {}
+    lines = text.splitlines()[1:]
+    result = {}
+    for line in lines:
+        if line == "---":
+            break
+        if ":" in line:
+            key, _, value = line.partition(":")
+            result[key.strip()] = value.strip()
+    return result
+
+
+def _ticket_slug(ticket_id: str, title: str) -> str:
+    slug = re.sub(r"[^\w\s-]", "", title.lower())
+    slug = re.sub(r"[\s_]+", "-", slug).strip("-")
+    return f"{ticket_id}-{slug}.md"
+
+
+def _save_ticket_to_vault(ticket_id: str, vault: Path, project: str | None = None, title: str | None = None) -> None:
+    """Save full ticket content to the Obsidian vault."""
+    filename = _ticket_slug(ticket_id, title) if title else f"{ticket_id}.md"
+    if project:
+        note_path = vault / "projects" / project / "tickets" / filename
+    else:
+        note_path = vault / "tickets" / filename
+    if note_path.exists():
+        return
+    result = subprocess.run(["zaira", "get", ticket_id], capture_output=True, text=True)
+    if result.returncode != 0 or not result.stdout.strip():
+        return
+    note_path.parent.mkdir(parents=True, exist_ok=True)
+    note_path.write_text(result.stdout)
+
+
+def _zaira_summary(ticket_id: str, vault: Path | None = None, project: str | None = None) -> str | None:
     """Return ticket summary, fetching via zaira and caching permanently."""
     cached: dict[str, str] = cache_module.get("tickets", ttl=10**9) or {}
     if ticket_id in cached:
+        if vault:
+            _save_ticket_to_vault(ticket_id, vault, project=project, title=cached[ticket_id])
         return cached[ticket_id]
     result = subprocess.run(
         ["zaira", "get", ticket_id, "--min"],
@@ -347,11 +388,16 @@ def _zaira_summary(ticket_id: str) -> str | None:
     if summary:
         cached[ticket_id] = summary
         cache_module.set("tickets", cached)
+    if vault:
+        _save_ticket_to_vault(ticket_id, vault, project=project, title=summary)
     return summary
 
 
 tickets_app = typer.Typer(help="Manage tickets", no_args_is_help=True)
 app.add_typer(tickets_app, name="tickets")
+
+specs_app = typer.Typer(help="Manage specs", no_args_is_help=True)
+app.add_typer(specs_app, name="specs")
 
 
 @tickets_app.command("list")
@@ -389,7 +435,9 @@ def tickets_list(
         return
 
     for ticket, entries in sorted(by_ticket.items()):
-        summary = _zaira_summary(ticket) if cfg.zaira else None
+        first_repo = entries[0][0]
+        project = cfg.project_for(first_repo)
+        summary = _zaira_summary(ticket, vault=cfg.obsidian_vault, project=project) if cfg.zaira else None
         header = f"[bold cyan]{ticket}[/bold cyan]"
         if summary:
             header += f"  {summary}"
@@ -419,3 +467,140 @@ def tickets_search(
 
     for tid, summary in sorted(matches.items()):
         console.print(f"[bold cyan]{tid}[/bold cyan]  {summary}")
+
+
+def _find_specs_dir(repo_root: Path) -> Path | None:
+    """Walk up from cwd to repo root looking for a specs/ directory."""
+    current = Path.cwd()
+    while True:
+        candidate = current / "specs"
+        if candidate.exists():
+            return candidate.resolve()
+        if current == repo_root:
+            return None
+        current = current.parent
+
+
+def _parse_spec_file(path: Path) -> dict[str, str]:
+    """Extract title, shipped status, and Jira tickets from a spec.md."""
+    text = path.read_text()
+    result: dict[str, str] = {}
+    for line in text.splitlines():
+        if not result.get("title") and line.startswith("# "):
+            result["title"] = line[2:].strip()
+        if line.strip() == "## Shipped":
+            result["shipped"] = "1"
+    tickets = sorted(set(t.upper() for t in _TICKET_RE.findall(text)))
+    if tickets:
+        result["tickets"] = " ".join(tickets)
+    return result
+
+
+@specs_app.command("where")
+def specs_where() -> None:
+    """Show the resolved specs/ directory for the current repo."""
+    try:
+        repo_root = locations_module.cwd_root()
+    except Exception:
+        console.print("[red]Not inside a git repository.[/red]")
+        raise typer.Exit(1)
+    specs_dir = _find_specs_dir(repo_root)
+    if not specs_dir:
+        console.print("[dim]No specs/ directory found in this repo.[/dim]")
+        raise typer.Exit(1)
+    console.print(str(specs_dir))
+
+
+@specs_app.command("list")
+def specs_list() -> None:
+    """List mspec specs in the current repo."""
+    try:
+        repo_root = locations_module.cwd_root()
+    except Exception:
+        console.print("[red]Not inside a git repository.[/red]")
+        raise typer.Exit(1)
+
+    specs_dir = _find_specs_dir(repo_root)
+    if not specs_dir:
+        console.print("[dim]No specs/ directory found in this repo.[/dim]")
+        return
+
+    spec_files = sorted(specs_dir.rglob("spec.md"))
+    if not spec_files:
+        console.print("[dim]No specs found in this repo.[/dim]")
+        return
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Area", style="dim", no_wrap=True)
+    table.add_column("Spec", style="bold", no_wrap=True)
+    table.add_column("Title")
+    table.add_column("Tickets", style="dim", no_wrap=True)
+
+    parsed = []
+    for spec_file in spec_files:
+        rel = spec_file.parent.relative_to(specs_dir)
+        parts = rel.parts
+        area = parts[-2] if len(parts) >= 2 else ""
+        spec_name = parts[-1]
+        info = _parse_spec_file(spec_file)
+        parsed.append((area, spec_name, info.get("title", ""), bool(info.get("shipped")), info.get("tickets", "")))
+
+    for area, spec_name, title, shipped, tickets in sorted(parsed, key=lambda x: not x[3]):
+        style = "dim" if shipped else ""
+        table.add_row(area, spec_name, title, tickets, style=style)
+
+    console.print(table)
+
+
+@app.command()
+def memo(
+    name: str = typer.Argument(..., help="Memo name or path to a markdown file"),
+) -> None:
+    """Create or open a memo in the Obsidian vault."""
+    cfg = config_module.load()
+    if not cfg.obsidian_vault:
+        console.print("[red]No obsidian_vault configured.[/red]")
+        raise typer.Exit(1)
+
+    project: str | None = None
+    try:
+        repo_root = locations_module.cwd_root()
+        repo_name = locations_module.repo_name_from_remote(repo_root)
+        if repo_name:
+            project = cfg.project_for(repo_name)
+    except Exception:
+        pass
+
+    source = Path(name)
+    if source.is_file() and source.suffix == ".md":
+        slug = source.name
+    else:
+        slug = name if name.endswith(".md") else f"{name}.md"
+
+    stem = slug[: -len(".md")]
+    base = cfg.obsidian_vault / "projects" / project / "memos" if project else cfg.obsidian_vault / "memos"
+    note_path = base / slug
+    source_str = str(source.resolve()) if source.is_file() and source.suffix == ".md" else None
+
+    # Find a matching existing note (same source) or the next free slot
+    counter = 1
+    candidate = note_path
+    while candidate.exists():
+        if _parse_front_matter(candidate.read_text()).get("source") == source_str:
+            note_path = candidate
+            break
+        candidate = base / f"{stem}-{counter}.md"
+        counter += 1
+    else:
+        note_path = candidate
+
+    note_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if source.is_file() and source.suffix == ".md":
+        content = f"---\nsource: {source_str}\n---\n\n" + source.read_text()
+        note_path.write_text(content)
+        console.print(f"[green]saved[/green] {note_path}")
+        return
+
+    editor = os.environ.get("EDITOR", "nano")
+    subprocess.run([editor, str(note_path)])

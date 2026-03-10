@@ -35,6 +35,11 @@ ppm tickets list                 # Show checked-out ticket branches (e.g. AC-168
 ppm tickets list dh              # Scoped to project or repo pattern
 ppm tickets search <query>       # Search cached ticket summaries
 
+# Specs (mspec)
+ppm specs list                   # List specs in current repo (walks up to find specs/)
+# specs/ is a symlink; structure: specs/<area>/<feature>/spec.md
+# WIP specs shown last; shipped specs (have "## Shipped" section) shown first, dimmed
+
 # Projects
 ppm projects list                # Show configured projects
 ppm projects add <name> <prefix> # Add project (e.g. ppm projects add dh dh-)

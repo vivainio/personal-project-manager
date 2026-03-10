@@ -25,6 +25,9 @@ repos_root: ~/r
 #   bar:
 #     prefixes:
 #       - bar-
+
+# Path to Obsidian vault; Jira tickets will be saved there as <TICKET>.md
+# obsidian_vault: ~/vaults/ppm
 """
 
 _yaml = YAML()
@@ -43,6 +46,7 @@ class Config:
     projects: list[Project] = field(default_factory=list)
     repos_root: Path = field(default_factory=lambda: Path("~/r").expanduser())
     zaira: bool = False
+    obsidian_vault: Path | None = None
 
     def project_for(self, repo_name: str) -> str | None:
         """Return the project name for a repo name, or None if unmatched."""
@@ -80,9 +84,12 @@ def load() -> Config:
         Project(name=name, prefixes=list(cfg.get("prefixes", []))) for name, cfg in (data.get("projects") or {}).items()
     ]
     repos_root = Path(str(data.get("repos_root", "~/r"))).expanduser()
+    raw_vault = data.get("obsidian_vault")
+    obsidian_vault = Path(str(raw_vault)).expanduser() if raw_vault else None
     return Config(
         orgs=list(data.get("orgs", [])),
         projects=projects,
         repos_root=repos_root,
         zaira=bool(data.get("zaira", False)),
+        obsidian_vault=obsidian_vault,
     )
