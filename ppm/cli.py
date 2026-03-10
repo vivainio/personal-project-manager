@@ -51,8 +51,17 @@ def repos(
     filter: str = typer.Argument(None, help="Project name or search pattern"),
 ) -> None:
     """List GitHub repositories."""
+    cfg = config_module.load()
+    if cfg.orgs:
+        accounts = gh_auth_module.get_accounts()
+        active = gh_auth_module.active_account(accounts)
+        if active and "_" not in active.username:
+            org_account = next((a for a in accounts if "_" in a.username), None)
+            if org_account:
+                subprocess.run(["gh", "auth", "switch", "--user", org_account.username], check=True)
+                console.print(f"[dim]switched gh account → {org_account.username}[/dim]")
+
     with console.status("Loading repos..."):
-        cfg = config_module.load()
         repo_list = repos_module.get_repos(refresh=refresh)
 
     if not forks:
