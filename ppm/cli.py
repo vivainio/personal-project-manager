@@ -200,6 +200,13 @@ def mv(
         console.print(f"[red]Repo not found locally:[/red] {current}")
         raise typer.Exit(1)
 
+    try:
+        Path.cwd().relative_to(current)
+        console.print(f"[red]Cannot move: you are inside the repo.[/red] cd out first.")
+        raise typer.Exit(1)
+    except ValueError:
+        pass  # cwd is not inside current — safe to move
+
     if current == expected:
         console.print(f"[dim]{repo_name} is already at its canonical path.[/dim]")
         return
