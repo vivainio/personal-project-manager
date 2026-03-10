@@ -40,7 +40,7 @@ def fetch_repos(limit: int = 1000) -> list[Repo]:
 
 def get_repos(refresh: bool = False) -> list[Repo]:
     if not refresh:
-        cached = cache.get(CACHE_KEY)
+        cached = cache.get(CACHE_KEY, ttl=7 * 24 * 3600)
         if cached is not None:
             return cached
     repos = fetch_repos()
