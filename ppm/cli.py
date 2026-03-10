@@ -243,7 +243,7 @@ def mv(
                 console.print(f"[red]{err}[/red]")
             else:
                 expected = locations_module.expected_path(repo_name, cfg)
-                display_to = str(expected).replace(root_str, "~/r", 1)
+                display_to = str(expected).replace(root_str, "~/r/", 1)
                 console.print(f"[green]moved[/green] [bold]{repo_name}[/bold] → {display_to}")
         return
 
