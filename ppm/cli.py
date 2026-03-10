@@ -595,15 +595,33 @@ def tickets_search(
 
 
 def _find_specs_dir(repo_root: Path) -> Path | None:
-    """Walk up from cwd to repo root looking for a specs/ directory."""
+    """Walk up from cwd to repo root looking for a specs/ directory.
+
+    Falls back to {prefix}-docs repo when no specs/ found in the current repo.
+    E.g. if current repo is foo-some-blah-blah, also checks foo-docs.
+    """
     current = Path.cwd()
     while True:
         candidate = current / "specs"
         if candidate.exists():
             return candidate.resolve()
         if current == repo_root:
-            return None
+            break
         current = current.parent
+
+    # Fall back: look for {prefix}-docs repo
+    repo_name = locations_module.repo_name_from_remote(repo_root)
+    if repo_name and "-" in repo_name:
+        prefix = repo_name.split("-")[0]
+        docs_repo = f"{prefix}-docs"
+        cfg = config_module.load()
+        docs_path = locations_module.resolve_path(docs_repo, cfg)
+        if docs_path.exists():
+            candidate = docs_path / "specs"
+            if candidate.exists():
+                return candidate.resolve()
+
+    return None
 
 
 def _parse_spec_file(path: Path) -> dict[str, str]:
